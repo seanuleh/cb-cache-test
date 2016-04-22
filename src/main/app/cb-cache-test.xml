@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+	<http:listener-config name="HTTP_Listener_Configuration" host="${http.listener.host}" port="${http.listener.port}" doc:name="HTTP Listener Configuration"/>
+    <http:request-config name="HTTP_Request_Configuration" host="${http.request.host}" port="${http.request.port}" doc:name="HTTP Request Configuration"/>
+    
+    <ee:object-store-caching-strategy name="Caching_Strategy" doc:name="Caching Strategy" keyGenerationExpression="#[payload]">
+        <custom-object-store class="caching.CouchbaseObjectStore">
+            <spring:property name="bucketPassword" value="${cache.bucket.password}"/>
+            <spring:property name="bucketId" value="${cache.bucket.id}"/>
+            <spring:property name="valueEvictionTime" value="${cache.eviction.time}"/>
+            <spring:property name="clusterNode" value="${cache.cluster.node}"/>
+        </custom-object-store>
+    </ee:object-store-caching-strategy>
+    
+    <flow name="couchbase-caching-testFlow">
+    	<http:listener config-ref="HTTP_Listener_Configuration" path="${http.listener.path}/{id}" allowedMethods="GET" doc:name="HTTP">
+            <http:response-builder>
+                <http:header headerName="Content-Type" value="application/json"/>
+            </http:response-builder>
+        </http:listener>
+        <set-variable variableName="id" value="#[message.inboundProperties['http.uri.params']['id']]" doc:name="Variable"/>
+        <set-variable variableName="testFlowPersistence" value="yep" doc:name="Variable"/>
+        <set-payload value="#[flowVars['id']]" doc:name="Set Payload to Id"/>
+        <ee:cache doc:name="Cache" cachingStrategy-ref="Caching_Strategy">
+            <logger message="Cache Miss - Going to the Endpoint" level="INFO" doc:name="Logger"/>
+        	<http:request config-ref="HTTP_Request_Configuration" path="${http.request.path}/{id}" method="GET" doc:name="HTTP">
+                    <http:request-builder>
+                    <http:uri-param paramName="id" value="#[flowVars['id']]"/>
+                    </http:request-builder>
+                </http:request>
+                <object-to-string-transformer doc:name="Object to String"/>
+        </ee:cache>
+        <logger message="Do we have flowVar persistence: #[flowVars.testFlowPersistence]" level="INFO" doc:name="Logger"/>
+    </flow>
+    
+</mule>
+
